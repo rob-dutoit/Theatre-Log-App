@@ -1,2 +1,2 @@
-# TUH Theatre Log App
+#Theatre Log App
 
