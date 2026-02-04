@@ -27,18 +27,21 @@ library(shinymanager)
 # }
 # idleTimer();", timeoutSeconds*1000, timeoutSeconds, timeoutSeconds*1000)
 # 
-# #-----Password Setup ----------------------------------------------------------------
-# 
-# # if password database has not been created, then create it
-# if(isFALSE(file.exists("database.sqlite"))){
-#   credentials <- data.frame(user = c("admin"),
-#                             password = c("admin"),
-#                             admin = c(TRUE),
-#                             stringsAsFactors = FALSE)
-#   create_db(credentials_data = credentials,
-#             sqlite_path = "database.sqlite", # will be created
-#             passphrase = "")
-# }
+#-----Password Setup ----------------------------------------------------------------
+
+# if password database has not been created, then create it
+if(isFALSE(file.exists("database.sqlite"))){
+  credentials <- data.frame(
+    user = c("rad", "admin"),
+    password = c("rad", "admin"),
+    # password will automatically be hashed
+    admin = c(FALSE, TRUE),
+    stringsAsFactors = FALSE
+  )
+  create_db(credentials_data = credentials,
+            sqlite_path = "database.sqlite", # will be created
+            passphrase = "")
+}
 
 #---------UI ----------------------------------------------------------------------------
 
@@ -121,6 +124,17 @@ ui <- fluidPage(
 #---------SERVER -----------------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  
+  #------ Password --------------------------------------------------------------
+  res_auth <- secure_server(
+    timeout = 0,
+    check_credentials = check_credentials(
+      "database.sqlite",
+      passphrase = ""))
+  
+  output$auth_output <- renderPrint({reactiveValuesToList(res_auth)})
+  
+  
   #------ Drop Down Table Manager ------------------------------------------------------------
   
   drop_down_csv_file <- "drop_down.csv"
@@ -1006,14 +1020,9 @@ server <- function(input, output, session) {
   })
   
   
-  # #------ Timeout and Password --------------------------------------------------------------
-  # res_auth <- secure_server(
-  #   timeout = 0,
-  #   check_credentials = check_credentials(
-  #     "database.sqlite",
-  #     passphrase = ""))
-  # 
-  # output$auth_output <- renderPrint({reactiveValuesToList(res_auth)})
+
+  
+  
   # observeEvent(input$timeOut, { 
   #   print(paste0("Session (", session$token, ") timed out at: ", Sys.time()))
   #   showModal(modalDialog(
@@ -1024,4 +1033,4 @@ server <- function(input, output, session) {
   #   session$close()
   # })
 }
-shinyApp(ui, server)
+shinyApp(secure_app(ui, enable_admin = TRUE), server)
