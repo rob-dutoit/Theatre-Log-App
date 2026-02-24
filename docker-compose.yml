@@ -1,0 +1,14 @@
+services:
+  theatre-log-app:
+    image: theatre-log-app
+    build: .
+    container_name: theatre-log-app
+    ports:
+      - "3838:3838"
+    volumes:
+      - data:/srv/shiny-server/data
+    restart: unless-stopped
+
+volumes:
+  data:
+

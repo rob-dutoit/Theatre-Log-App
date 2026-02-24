@@ -1,3 +1,5 @@
+Sys.setenv(TZ = "Australia/Brisbane")
+
 library(shiny)
 library(shinyjs)
 library(DT)
@@ -30,7 +32,7 @@ library(shinymanager)
 #-----Password Setup ----------------------------------------------------------------
 
 # if password database has not been created, then create it
-if(isFALSE(file.exists("database.sqlite"))){
+if(isFALSE(file.exists("data/database.sqlite"))){
   credentials <- data.frame(
     user = c("rad", "admin"),
     password = c("rad", "admin"),
@@ -39,7 +41,7 @@ if(isFALSE(file.exists("database.sqlite"))){
     stringsAsFactors = FALSE
   )
   create_db(credentials_data = credentials,
-            sqlite_path = "database.sqlite", # will be created
+            sqlite_path = "data/database.sqlite", # will be created
             passphrase = "")
 }
 
@@ -64,6 +66,8 @@ ui <- fluidPage(
                br(),
                br(),
                HTML("<i>For issues, questions, recommendations, contact the app's author - robert.dutoit@health.qld.gov.au</i>")
+               
+              
   ),
   
   mainPanel(
@@ -129,7 +133,7 @@ server <- function(input, output, session) {
   res_auth <- secure_server(
     timeout = 0,
     check_credentials = check_credentials(
-      "database.sqlite",
+      "data/database.sqlite",
       passphrase = ""))
   
   output$auth_output <- renderPrint({reactiveValuesToList(res_auth)})
@@ -137,7 +141,7 @@ server <- function(input, output, session) {
   
   #------ Drop Down Table Manager ------------------------------------------------------------
   
-  drop_down_csv_file <- "drop_down.csv"
+  drop_down_csv_file <- "data/drop_down.csv"
   
   drop_down_data <- reactiveVal(read.csv(drop_down_csv_file, stringsAsFactors = FALSE))
   
@@ -189,7 +193,7 @@ server <- function(input, output, session) {
   cases_data <- reactiveFileReader(
     intervalMillis = 500,
     session = session,
-    filePath = "cases.csv",
+    filePath = "data/cases.csv",
     readFunc = function(file) {
       df <- read.csv(file, stringsAsFactors = FALSE)
       colnames(df) <- c("Category", "Exam Date", "Accession No.", "Patient URN", "Patient DOB", "Rad Initials", "Theatre", "Equipment", "Examination Area", "Specific Examination", "Screening Time (s)", "Input Dose", "Input Dose Unit", "Dose (mGy)", "Input DAP", "Input DAP Unit", "DAP (Gy.cm2)","Time b/n 30 & 10-min call", "Time in Theatre", "O-Arm Number of Spins","O-Arm Spin kVp", "O-Arm Spin mAs", "O-Arm 3D Dose (mGy)", "O-Arm 3D DLP (mGy.cm)", "O-Arm Case Type", "Notes" )
@@ -226,7 +230,7 @@ server <- function(input, output, session) {
     if (!is.null(sel)) {
       rv$data <- rv$data[-sel, ]
       # Save updated data back to CSV
-      write.csv(rv$data[nrow(rv$data):1, ], "cases.csv", row.names = FALSE)
+      write.csv(rv$data[nrow(rv$data):1, ], "data/cases.csv", row.names = FALSE)
     }
     removeModal()
   })
@@ -256,6 +260,7 @@ server <- function(input, output, session) {
     n_last_365_days <- sum(cases_data()$`Exam Date` >= Sys.Date() - 365 & cases_data()$`Exam Date` <= Sys.Date(), na.rm = TRUE)
     oldest_case <- min(cases_data()$`Exam Date`, na.rm = TRUE)
     
+    
     tagList(
       HTML("<b><u>Case Summary</u></b>"),
       br(),
@@ -267,6 +272,9 @@ server <- function(input, output, session) {
       br(),
       HTML(paste0("Oldest case: <b>", oldest_case, "</b>"))
     )
+    
+    
+    
   })
   
   #------ Room Shielding Table -----------------------------------------------------
@@ -311,7 +319,7 @@ server <- function(input, output, session) {
   
   #------ Reactive Lists (The 13 Watchers O.O) ---------------------------------------------------------
   
-  drop_down_file_path = "/home/rob/Desktop/temp/TUH_theatre_log_WIP/drop_down.csv"
+  drop_down_file_path = "data/drop_down.csv"
   
   
   rad_initials_list <- reactivePoll(999, session,
@@ -434,7 +442,7 @@ server <- function(input, output, session) {
   
   
   #------ Saving a New Case to File -----------------------------------------------------
-  save_case <- function(new_row, file = "cases.csv") {
+  save_case <- function(new_row, file = "data/cases.csv") {
     if (!file.exists(file)) {
       write.csv(new_row, file, row.names = FALSE)
     } else {
@@ -1033,4 +1041,12 @@ server <- function(input, output, session) {
   #   session$close()
   # })
 }
-shinyApp(secure_app(ui, enable_admin = TRUE), server)
+ui_secure <- secure_app(
+  ui,
+  enable_admin = TRUE,
+  language = list(
+    "please_authenticate" = "jlhgeluhrgv"
+  )
+)
+
+shinyApp(ui_secure, server)
