@@ -11,24 +11,6 @@ library(shinymanager)
 #library(bslib)
 #commentsss
 
-
-# #-----Timeout Setup -----------------------------------------------------------------
-# 
-# timeoutSeconds <- 0.1
-# inactivity <- sprintf("function idleTimer() {
-#   var t = setTimeout(logout, %s);
-#   window.onmousemove = resetTimer; // catches mouse movements
-#   window.onmousedown = resetTimer; // catches mouse movements
-#   window.onclick = resetTimer;     // catches mouse clicks
-#   window.onscroll = resetTimer;    // catches scrolling
-#   window.onkeypress = resetTimer;  //catches keyboard actions
-#   function logout() {Shiny.setInputValue('timeOut', '%ss')}
-#   function resetTimer() {clearTimeout(t); 
-#     t = setTimeout(logout, %s);  // time is in milliseconds (1000 is 1 second)
-#   }
-# }
-# idleTimer();", timeoutSeconds*1000, timeoutSeconds, timeoutSeconds*1000)
-# 
 #-----Password Setup ----------------------------------------------------------------
 
 # if password database has not been created, then create it
@@ -131,7 +113,7 @@ server <- function(input, output, session) {
   
   #------ Password --------------------------------------------------------------
   res_auth <- secure_server(
-    timeout = 0,
+    timeout = 15,
     check_credentials = check_credentials(
       "data/database.sqlite",
       passphrase = ""))
@@ -1027,19 +1009,6 @@ server <- function(input, output, session) {
       layout(xaxis = list(title = input$xvar_2), yaxis = list(title = input$yvar_2), boxmode = "group")
   })
   
-  
-
-  
-  
-  # observeEvent(input$timeOut, { 
-  #   print(paste0("Session (", session$token, ") timed out at: ", Sys.time()))
-  #   showModal(modalDialog(
-  #     title = "Timeout",
-  #     paste("Session timeout due to 15 minutes of inactivity -", format(Sys.time(), "%a %b %d %X %Y")),
-  #     footer = NULL
-  #   ))
-  #   session$close()
-  # })
 }
 ui_secure <- secure_app(
   ui,

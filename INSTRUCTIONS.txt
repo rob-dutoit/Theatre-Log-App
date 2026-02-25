@@ -1,0 +1,11 @@
+==From blank:
+
+docker compose up -d --build
+
+==this makes the image, volume, and container
+
+==then
+
+docker run --rm -v theatre-log-app_data:/volume -v ${PWD}/data:/source alpine sh -c "cp -r /source/* /volume/"
+
+==copies the data into the volume
