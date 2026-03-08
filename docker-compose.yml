@@ -1,6 +1,6 @@
 services:
   theatre-log-app:
-    image: theatre-log-app
+    image: dutoitro/theatre-log-app:latest
     build: .
     container_name: theatre-log-app
     ports:

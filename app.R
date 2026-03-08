@@ -7,64 +7,43 @@ library(plotly)
 library(ggplot2)
 library(dplyr)
 library(shinymanager)
-#library(shinythemes)
-#library(bslib)
-#commentsss
 
-#-----Password Setup ----------------------------------------------------------------
-
-# if password database has not been created, then create it
+#----- Password Database Setup ----------------------------------------------------
 if(isFALSE(file.exists("data/database.sqlite"))){
   credentials <- data.frame(
     user = c("rad", "admin"),
     password = c("rad", "admin"),
-    # password will automatically be hashed
     admin = c(FALSE, TRUE),
     stringsAsFactors = FALSE
   )
   create_db(credentials_data = credentials,
-            sqlite_path = "data/database.sqlite", # will be created
+            sqlite_path = "data/database.sqlite",
             passphrase = "")
 }
 
-#---------UI ----------------------------------------------------------------------------
-
-
+#--------- UI ---------------------------------------------------------------------
 ui <- fluidPage(
-  #theme = shinytheme("flatly"),
   useShinyjs(),
-  titlePanel("TUH Theatre Radiation Use Log"),
+  uiOutput("app_title"),
   sidebarPanel(width = 3,
-               actionButton("add_II_case", "Add II Case", class = "btn btn-primary", icon = icon("plus"), style = "width:100%; font-size:18px; white-space:normal;"),
-               br(),
-               br(),
-               actionButton("add_litho_case", "Add Lithotripter Case", class = "btn btn-primary", icon = icon("plus"), style = "width:100%; font-size:18px; white-space:normal;"),
-               br(),
-               br(),
-               actionButton("add_oarm_case", "Add O-Arm Case", class = "btn btn-primary", icon = icon("plus"), style = "width:100%; font-size:18px; white-space:normal;"),
-               br(),
-               br(),
+               uiOutput("add_II_btn"),
+               uiOutput("add_litho_btn"),
+               uiOutput("add_oarm_btn"),
                uiOutput("dose_summary"),
-               br(),
-               br(),
-               HTML("<i>For issues, questions, recommendations, contact the app's author - robert.dutoit@health.qld.gov.au</i>")
-               
-              
+               br(), br(),
+               HTML("<i>For issues, questions, recommendations, contact the app's author - robert.dutoit@health.qld.gov.au</i>"),
+               br(), br(),
+               actionButton("log_out", "Log Out", class = "btn btn-primary", icon = icon("arrow-right-from-bracket"))
   ),
-  
   mainPanel(
     tags$head(tags$style(HTML(".shiny-split-layout > div {overflow: visible;}"))),
-    
     width = 9,
-    
-    
     tabsetPanel(
       tabPanel("Case Log",
                br(),
                downloadButton("download_csv", "Download CSV"),
                actionButton("delete_case_row", "Delete Selected Row", icon = icon("eraser")),
-               br(),
-               br(),
+               br(), br(),
                DTOutput("cases_table")
       ),
       tabPanel("Data Analysis",
@@ -72,44 +51,162 @@ ui <- fluidPage(
                br(),
                splitLayout(uiOutput("xvar_1"), uiOutput("yvar_1"), uiOutput("colorvar_1")),
                plotlyOutput("plot1"),
-               
                br(),
                splitLayout(uiOutput("xvar_2"), uiOutput("yvar_2"), uiOutput("colorvar_2")),
-               plotlyOutput("plot2"),
+               plotlyOutput("plot2")
+      ),
+      # tabPanel("Manage Dropdowns",
+      #          br(),
+      #          actionButton("save", "Save and Reload", class = "btn btn-success", icon = icon("floppy-disk")),
+      #          actionButton("add_row", "Add Row", icon = icon("plus")),
+      #          actionButton("delete_row", "Delete Selected Row", icon = icon("eraser")),
+      #          br(), br(),
+      #          DTOutput("drop_down_table")
+      # ),
+      # tabPanel("Version History",
+      #          HTML("<i>v0.1, 9 September 2025 - initial version for consultation by clinicians</i>"),
+      #          br(), br(),
+      #          HTML("<i>v0.2, 22 September 2025 - removed O-Arm Dose Selection and Ziehm data fields, added author contact note, added time filter slider in Data Analysis tab.</i>")
+      # ),
+      
+      tabPanel("Admin Settings",
+               uiOutput("admin_ui")
       ),
       
-      tabPanel("Manage Dropdowns",
-               br(),
-               actionButton("save", "Save and Reload", class = "btn btn-success", icon = icon("floppy-disk")),
-               actionButton("add_row", "Add Row", icon = icon("plus")),
-               actionButton("delete_row", "Delete Selected Row", icon = icon("eraser")),
-               br(), 
-               br(),
-               DTOutput("drop_down_table")
-      ),
-      tabPanel("Version History",
-               HTML("<i>v0.1, 9 September 2025 - inital version for consultation by clinicians</i>"),
-               br(), 
-               br(),
-               HTML("<i>v0.2, 22 September 2025 - removed O-Arm Dose Selection and Ziehm data fields, added author contact note, added time filter slider in Data Analysis tab.</i>")
-      ),         
-      tabPanel("WIP - Room Shielding",
+      tabPanel("*WIP* - Room Shielding",
                br(),
                numericInput("no_weeks", "Show Data From the Last X Weeks", value = 26),
-               HTML("<span style='color:red'><i>Work in Progress - For this page to be useful and accurate, 
-                    we need accurate weekly DAP limits for each theatre. These limits are are ultimately imformed 
-                    by workloads during the premise recertification process. By collecting case data in this app, it will
-                    allow a better understanding of workloads and ultimately more accurate limits.</i></span>"),
+               HTML("<span style='color:red'><i>Work in Progress - Accurate weekly DAP limits required for meaningful results.</i></span>"),
                br(),
                DTOutput("room_shielding_table")
       )
+      
     )
   )
 )
 
-#---------SERVER -----------------------------------------------------------------------------
-
+#--------- SERVER -----------------------------------------------------------------
 server <- function(input, output, session) {
+  
+  #------ Password --------------------------------------------------------------
+  res_auth <- secure_server(
+    timeout = 15,
+    check_credentials = check_credentials("data/database.sqlite", passphrase = "")
+  )
+  
+  # Reactive output to detect admin
+  output$is_admin <- reactive({
+    res_auth$admin
+  })
+  outputOptions(output, "is_admin", suspendWhenHidden = FALSE)
+  
+  # Admin settings file
+  admin_settings_file <- "data/admin_settings.csv"
+  
+  if (!file.exists(admin_settings_file)) {
+    default_settings <- data.frame(
+      app_title = "TUH Theatre Radiation Use Log",
+      enable_II = TRUE,
+      enable_litho = TRUE,
+      enable_oarm = TRUE,
+      stringsAsFactors = FALSE
+    )
+    write.csv(default_settings, admin_settings_file, row.names = FALSE)
+  }
+  
+  # Reactive admin settings reader
+  admin_settings <- reactiveFileReader(
+    intervalMillis = 1000,
+    session = session,
+    filePath = admin_settings_file,
+    readFunc = function(file) { read.csv(file, stringsAsFactors = FALSE) }
+  )
+  
+  #--------- App Title ---------------------
+  output$app_title <- renderUI({
+    settings <- admin_settings()
+    titlePanel(settings$app_title[1])
+  })
+  
+  #--------- Sidebar Buttons --------------
+  output$add_II_btn <- renderUI({
+    if (admin_settings()$enable_II[1]) {
+      tagList(
+        actionButton("add_II_case", "Add II Case", class = "btn btn-primary",
+                     icon = icon("plus"), style = "width:100%; font-size:18px; white-space:normal;"),
+        br(), br()
+      )
+    }
+  })
+  
+  output$add_litho_btn <- renderUI({
+    if (admin_settings()$enable_litho[1]) {
+      tagList(
+        actionButton("add_litho_case", "Add Lithotripter Case", class = "btn btn-primary",
+                     icon = icon("plus"), style = "width:100%; font-size:18px; white-space:normal;"),
+        br(), br()
+      )
+    }
+  })
+  
+  output$add_oarm_btn <- renderUI({
+    if (admin_settings()$enable_oarm[1]) {
+      tagList(
+        actionButton("add_oarm_case", "Add O-Arm Case", class = "btn btn-primary",
+                     icon = icon("plus"), style = "width:100%; font-size:18px; white-space:normal;"),
+        br(), br()
+      )
+    }
+  })
+  
+  # Log Out
+  observeEvent(input$log_out, {
+    session$reload()
+  })
+  
+  #--------- Admin UI ----------------------
+  output$admin_ui <- renderUI({
+    if (res_auth$admin) {
+      # Admin content
+      settings <- admin_settings()
+      tagList(
+        br(),
+        h4("App Display Settings"),
+        textInput("admin_app_title", "Application Title", value = settings$app_title[1]),
+        checkboxInput("enable_II", "Enable Add II Case Button", value = settings$enable_II[1]),
+        checkboxInput("enable_litho", "Enable Add Lithotripter Case Button", value = settings$enable_litho[1]),
+        checkboxInput("enable_oarm", "Enable Add O-Arm Case Button", value = settings$enable_oarm[1]),
+        actionButton("save_admin_settings", "Save Above Settings", class = "btn btn-success", icon = icon("floppy-disk")),
+        br(),
+        br(),
+        actionButton("save", "Save Table and Reload", class = "btn btn-success", icon = icon("floppy-disk")),
+        actionButton("add_row", "Add Row", icon = icon("plus")),
+        actionButton("delete_row", "Delete Selected Row", icon = icon("eraser")),
+        br(), br(),
+        DTOutput("drop_down_table")
+      )
+    } else {
+      # Non-admin content
+      tagList(
+        br(),
+        h4("Admin Access Required"),
+        p("You do not have permission to view or modify these settings.")
+      )
+    }
+  })
+  
+  # Save admin settings
+  observeEvent(input$save_admin_settings, {
+    new_settings <- data.frame(
+      app_title = input$admin_app_title,
+      enable_II = input$enable_II,
+      enable_litho = input$enable_litho,
+      enable_oarm = input$enable_oarm,
+      stringsAsFactors = FALSE
+    )
+    write.csv(new_settings, admin_settings_file, row.names = FALSE)
+    showNotification("Admin settings saved!", type = "message")
+  })
   
   #------ Password --------------------------------------------------------------
   res_auth <- secure_server(
@@ -803,7 +900,7 @@ server <- function(input, output, session) {
     })
     
   })
-  
+  "mangae Dropdown"
   #------ Save Button for O-Arm --------------------------------------------------------------------------
   
   new_case <- reactiveVal(NULL)

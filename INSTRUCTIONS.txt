@@ -2,10 +2,11 @@
 
 docker compose up -d --build
 
-==this makes the image, volume, and container
+==this makes the image, volume, and container with the cases, sql, and settings files as seed data.
 
 ==then
 
-docker run --rm -v theatre-log-app_data:/volume -v ${PWD}/data:/source alpine sh -c "cp -r /source/* /volume/"
+docker run --rm -v theatre-log-app_data:/data -v ${PWD}:/tmp alpine `
+    sh -c "cp /tmp/drop_down.csv /data/ && chmod 666 /data/drop_down.csv"
 
-==copies the data into the volume
+==copies the (read and writable) dropdown data into the volume (site specific)
