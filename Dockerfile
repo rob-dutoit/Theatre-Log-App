@@ -18,10 +18,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install required R packages
-RUN R -e "install.packages(c('shiny', 'dplyr', 'ggplot2','shinyjs', 'DT','plotly','shinymanager'), repos='https://cloud.r-project.org/')"
+RUN Rscript -e "install.packages('remotes')"
+RUN Rscript -e "remotes::install_github('datastorm-open/shinymanager')"
+
+# Install required R packages
+RUN R -e "install.packages(c('shiny', 'dplyr', 'ggplot2','shinyjs', 'DT','plotly','IDEAFilter'), repos='https://cloud.r-project.org/')"
 
 # Verify all packages installed
-RUN R -e "pkgs <- c('shiny','dplyr','ggplot2','shinyjs','DT','plotly','shinymanager'); missing <- pkgs[!pkgs %in% rownames(installed.packages())]; if(length(missing)) stop(paste('Missing packages:', paste(missing, collapse=','))) else cat('All packages installed successfully\n')"
+RUN R -e "pkgs <- c('shiny','dplyr','ggplot2','shinyjs','DT','plotly','shinymanager','IDEAFilter'); missing <- pkgs[!pkgs %in% rownames(installed.packages())]; if(length(missing)) stop(paste('Missing packages:', paste(missing, collapse=','))) else cat('All packages installed successfully\n')"
 
 # Remove default example apps from rocker/shiny
 RUN rm -rf /srv/shiny-server/*

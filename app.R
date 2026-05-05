@@ -7,13 +7,14 @@ library(plotly)
 library(ggplot2)
 library(dplyr)
 library(shinymanager)
+library(IDEAFilter)
 
 #----- Password Database Setup ----------------------------------------------------
 if(isFALSE(file.exists("data/database.sqlite"))){
   credentials <- data.frame(
-    user = c("rad", "admin"),
-    password = c("rad", "admin"),
-    admin = c(FALSE, TRUE),
+    user = c("rad", "admin", "dutoitro"),
+    password = c("rad", "admin","dutoitro"),
+    admin = c(FALSE, TRUE, TRUE),
     stringsAsFactors = FALSE
   )
   create_db(credentials_data = credentials,
@@ -21,67 +22,85 @@ if(isFALSE(file.exists("data/database.sqlite"))){
             passphrase = "")
 }
 
+#----- Plotting Function ----------------------------------------------------
+
+make_generic_plot <- function(df, x_var, y_var, colour_var, chart_type, session = NULL) {
+  validate(need(chart_type != "", " "),
+           need(y_var     != "", " "),
+           need(x_var     != "", " "),
+           need(colour_var != "", " "))
+  plot_ly(data = df, x = ~get(x_var), y = ~get(y_var), color = ~get(colour_var), type = chart_type) %>%
+    toWebGL() %>%
+    layout(boxmode = "group", violinmode = "group", yaxis = list(title = y_var), xaxis = list(title = x_var), showlegend = TRUE, legend = list(title = list(text = colour_var))) %>%
+    colorbar(title = colour_var)}
+
 #--------- UI ---------------------------------------------------------------------
-ui <- fluidPage(
-  useShinyjs(),
-  uiOutput("app_title"),
-  sidebarPanel(width = 3,
-               uiOutput("add_II_btn"),
-               uiOutput("add_litho_btn"),
-               uiOutput("add_oarm_btn"),
-               uiOutput("dose_summary"),
-               br(), br(),
-               HTML("<i>For issues, questions, recommendations, contact the app's author - robert.dutoit@health.qld.gov.au</i>"),
-               br(), br(),
-               actionButton("log_out", "Log Out", class = "btn btn-primary", icon = icon("arrow-right-from-bracket"))
+ui <- navbarPage(
+  #title = "app_title",
+  title = uiOutput("app_title"),
+  windowTitle = "Theatre Radiation Use Log",
+  id = "main_navbar",
+  
+  # ── Case Log (has sidebar) ──────────────────────────────────────────────────
+  tabPanel("Case Log",
+           sidebarLayout(
+             sidebarPanel(width = 3,
+                          uiOutput("add_II_btn"),
+                          uiOutput("add_litho_btn"),
+                          uiOutput("add_oarm_btn"),
+                          uiOutput("dose_summary"),
+                          br(), br(),
+                          HTML("<i>For issues, questions, recommendations, contact the app's author - robert.dutoit@health.qld.gov.au</i>"),
+                          br(), br(),
+                          actionButton("log_out", "Log Out", class = "btn btn-primary", icon = icon("arrow-right-from-bracket"))
+             ),
+             mainPanel(width = 9,
+                       tags$head(tags$style(HTML(".shiny-split-layout > div {overflow: visible;}"))),
+                       br(),
+                       actionButton("delete_case_row", "Delete Selected Row", icon = icon("eraser"), class = "btn-danger"),
+                       downloadButton("download_csv", "Download data table as .csv"),
+                       br(), br(),
+                       DTOutput("cases_table")
+             )
+           )
   ),
-  mainPanel(
-    tags$head(tags$style(HTML(".shiny-split-layout > div {overflow: visible;}"))),
-    width = 9,
-    tabsetPanel(
-      tabPanel("Case Log",
-               br(),
-               downloadButton("download_csv", "Download CSV"),
-               actionButton("delete_case_row", "Delete Selected Row", icon = icon("eraser")),
-               br(), br(),
-               DTOutput("cases_table")
-      ),
-      tabPanel("Data Analysis",
-               uiOutput("date_range"), 
-               br(),
-               splitLayout(uiOutput("xvar_1"), uiOutput("yvar_1"), uiOutput("colorvar_1")),
-               plotlyOutput("plot1"),
-               br(),
-               splitLayout(uiOutput("xvar_2"), uiOutput("yvar_2"), uiOutput("colorvar_2")),
-               plotlyOutput("plot2")
-      ),
-      # tabPanel("Manage Dropdowns",
-      #          br(),
-      #          actionButton("save", "Save and Reload", class = "btn btn-success", icon = icon("floppy-disk")),
-      #          actionButton("add_row", "Add Row", icon = icon("plus")),
-      #          actionButton("delete_row", "Delete Selected Row", icon = icon("eraser")),
-      #          br(), br(),
-      #          DTOutput("drop_down_table")
-      # ),
-      # tabPanel("Version History",
-      #          HTML("<i>v0.1, 9 September 2025 - initial version for consultation by clinicians</i>"),
-      #          br(), br(),
-      #          HTML("<i>v0.2, 22 September 2025 - removed O-Arm Dose Selection and Ziehm data fields, added author contact note, added time filter slider in Data Analysis tab.</i>")
-      # ),
-      
-      tabPanel("Admin Settings",
-               uiOutput("admin_ui")
-      ),
-      
-      tabPanel("*WIP* - Room Shielding",
-               br(),
-               numericInput("no_weeks", "Show Data From the Last X Weeks", value = 26),
-               HTML("<span style='color:red'><i>Work in Progress - Accurate weekly DAP limits required for meaningful results.</i></span>"),
-               br(),
-               DTOutput("room_shielding_table")
-      )
-      
-    )
+  
+  # ── Data Analysis (blank sidebar) ──────────────────────────────────────────
+  tabPanel("Data Analysis",
+           sidebarLayout(
+             sidebarPanel(width = 3,
+                          IDEAFilter_ui("data_filter"),
+                          actionButton(class = "btn-primary", "refresh_data_to_plot", "Apply filtered data to plots", width = "100%"),
+             ),
+             mainPanel(width = 9,
+                       tabsetPanel(
+                         tabPanel("Plots",
+                                  br(),
+                                  uiOutput("plots")
+                         ),
+                         tabPanel("Data",
+                                  br(),
+                                  downloadButton("download_plotted_csv", "Download data table as .csv"),
+                                  br(), br(),
+                                  dataTableOutput("plotted_data_table")
+                         )
+                       )
+             )
+           )
+  ),
+  
+  # ── Admin Settings (blank sidebar) ─────────────────────────────────────────
+  tabPanel("Admin Settings",
+           uiOutput("admin_ui")
+           
+  ),
+  
+  # ── Room Shielding (blank sidebar) ─────────────────────────────────────────
+  tabPanel("*WIP* - Room Shielding",
+           numericInput("no_weeks", "Show Data From the Last X Weeks", value = 26),
+           HTML("<span style='color:red'><i>Work in Progress - Accurate weekly DAP limits required for meaningful results.</i></span>"),
+           br(),
+           DTOutput("room_shielding_table")
   )
 )
 
@@ -90,7 +109,7 @@ server <- function(input, output, session) {
   
   #------ Password --------------------------------------------------------------
   res_auth <- secure_server(
-    timeout = 15,
+    timeout = 60,
     check_credentials = check_credentials("data/database.sqlite", passphrase = "")
   )
   
@@ -125,7 +144,7 @@ server <- function(input, output, session) {
   #--------- App Title ---------------------
   output$app_title <- renderUI({
     settings <- admin_settings()
-    titlePanel(settings$app_title[1])
+    settings$app_title[1]
   })
   
   #--------- Sidebar Buttons --------------
@@ -170,15 +189,14 @@ server <- function(input, output, session) {
       # Admin content
       settings <- admin_settings()
       tagList(
-        br(),
-        h4("App Display Settings"),
+        h4("Display Settings:"),
         textInput("admin_app_title", "Application Title", value = settings$app_title[1]),
         checkboxInput("enable_II", "Enable Add II Case Button", value = settings$enable_II[1]),
         checkboxInput("enable_litho", "Enable Add Lithotripter Case Button", value = settings$enable_litho[1]),
         checkboxInput("enable_oarm", "Enable Add O-Arm Case Button", value = settings$enable_oarm[1]),
         actionButton("save_admin_settings", "Save Above Settings", class = "btn btn-success", icon = icon("floppy-disk")),
-        br(),
-        br(),
+        hr(),
+        h4("Dropdown Table Management:"),
         actionButton("save", "Save Table and Reload", class = "btn btn-success", icon = icon("floppy-disk")),
         actionButton("add_row", "Add Row", icon = icon("plus")),
         actionButton("delete_row", "Delete Selected Row", icon = icon("eraser")),
@@ -207,16 +225,6 @@ server <- function(input, output, session) {
     write.csv(new_settings, admin_settings_file, row.names = FALSE)
     showNotification("Admin settings saved!", type = "message")
   })
-  
-  #------ Password --------------------------------------------------------------
-  res_auth <- secure_server(
-    timeout = 15,
-    check_credentials = check_credentials(
-      "data/database.sqlite",
-      passphrase = ""))
-  
-  output$auth_output <- renderPrint({reactiveValuesToList(res_auth)})
-  
   
   #------ Drop Down Table Manager ------------------------------------------------------------
   
@@ -290,7 +298,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$delete_case_row, {
     if (is.null(input$cases_table_rows_selected)) {
-      showNotification("Please select a row to delete first.", type = "error")
+      showNotification("No row selected", type = "error")
     } else {
       showModal(modalDialog(
         title = "Confirm Deletion",
@@ -571,9 +579,9 @@ server <- function(input, output, session) {
                                      column(6, numericInput("screening_min", "(min)", value = NA, min = 0)),
                                      column(6, numericInput("screening_sec", "(sec)", value = NA, min = 0))),
                                    fluidRow(column(6,numericInput("input_dose", label = HTML("Dose<span style='color:red'>*</span>"), value = NA)),
-                                            column(6,selectInput("input_dose_units", label = HTML("Units<span style='color:red'>*</span>"), choices = dose_units_list, width = "100px"))),
+                                            column(6,selectInput("input_dose_units", label = HTML("Units<span style='color:red'>*</span>"), choices = dose_units_list, selected = "mGy", width = "100px"))),
                                    fluidRow(column(6, numericInput("input_dap", label = HTML("Dose Area Product<span style='color:red'>*</span>"), value = NA)),
-                                            column(6, selectInput("input_dap_units", label = HTML("Units<span style='color:red'>*</span>"), choices = dap_units_list, width = "100px"))),
+                                            column(6, selectInput("input_dap_units", label = HTML("Units<span style='color:red'>*</span>"), choices = dap_units_list, selected = "Gy.cm2",width = "100px"))),
                                    selectInput("time_between", label = HTML("Time b/n 30min & 10min call<span style='color:red'>*</span>"), choices = time_between_list),
                                    selectInput("time_in_theatre", label = HTML("Time in Theatre (min)<span style='color:red'>*</span>"), choices = time_in_theatre_list),
                                    textInput("note", "Notes")
@@ -680,7 +688,7 @@ server <- function(input, output, session) {
     
     if (!is.na(row$dose) && !is.na(row$screening_time) && row$screening_time > 0) {
       dose_rate <- (row$dose / row$screening_time) * 60
-      if (dose_rate < 1 || dose_rate > 200) {
+      if (dose_rate < 0.1 || dose_rate > 20) {
         warnings <- c(
           warnings,
           list(
@@ -688,7 +696,7 @@ server <- function(input, output, session) {
               style = "margin-bottom: 10px;",
               "Inputs imply an average Dose Rate of ",
               tags$b(paste0(round(dose_rate, 1), " mGy/min")),
-              " (expected 1 – 200 mGy/min). Check Dose and Screening Time values and units are correct."
+              " (typical range 0.1 – 20 mGy/min). Please check Dose and Screening Time values and units are correct before preceeding."
             )
           )
         )
@@ -969,7 +977,7 @@ server <- function(input, output, session) {
     
     if (!is.na(row$dose) && !is.na(row$screening_time) && row$screening_time > 0) {
       dose_rate <- (row$dose / row$screening_time) * 60
-      if (dose_rate < 1 || dose_rate > 200) {
+      if (dose_rate < 0.1 || dose_rate > 20) {
         warnings <- c(
           warnings,
           list(
@@ -977,7 +985,7 @@ server <- function(input, output, session) {
               style = "margin-bottom: 10px;",
               "Inputs imply an average Dose Rate of ",
               tags$b(paste0(round(dose_rate, 1), " mGy/min")),
-              " (expected 1 – 200 mGy/min). Check Dose and Screening Time values and units are correct."
+              " (typical range 0.1 – 20 mGy/min). Please check Dose and Screening Time values and units are correct before preceeding."
             )
           )
         )
@@ -1026,93 +1034,132 @@ server <- function(input, output, session) {
   })
   #------ Data Plotting ----------------------------------------------------------------------------------
   
-  output$date_range <- renderUI({
-    req(cases_data())
-    df <- cases_data()
-    
-    # Ensure the date column is a Date object
-    df$`Exam Date` <- as.Date(df$`Exam Date`, format = "%Y-%m-%d")
-    
-    div(
-      style = "width: 100%; text-align: center;",
-      sliderInput(
-        inputId = "date_range",
-        label = "",
-        min = min(df$`Exam Date`, na.rm = TRUE),
-        max = max(df$`Exam Date`, na.rm = TRUE),
-        value = c(min(df$`Exam Date`, na.rm = TRUE), max(df$`Exam Date`, na.rm = TRUE)),
-        timeFormat = "%Y-%m-%d",
-        width = "100%"
-      )
-    )
-  })
+  # output$date_range <- renderUI({
+  #   req(cases_data())
+  #   df <- cases_data()
+  #   
+  #   # Ensure the date column is a Date object
+  #   df$`Exam Date` <- as.Date(df$`Exam Date`, format = "%Y-%m-%d")
+  #   
+  #   div(
+  #     style = "width: 100%; text-align: center;",
+  #     sliderInput(
+  #       inputId = "date_range",
+  #       label = "",
+  #       min = min(df$`Exam Date`, na.rm = TRUE),
+  #       max = max(df$`Exam Date`, na.rm = TRUE),
+  #       value = c(min(df$`Exam Date`, na.rm = TRUE), max(df$`Exam Date`, na.rm = TRUE)),
+  #       timeFormat = "%Y-%m-%d",
+  #       width = "100%"
+  #     )
+  #   )
+  # })
   
   
-  # Filtered data based on date range
-  time_filtered_cases_data <- reactive({
+  cases_data_with_none_col <- reactive({
     req(cases_data())
     df <- cases_data()
-    
-    if (!is.null(input$date_range)) {
-      df <- df %>%
-        filter(`Exam Date` >= input$date_range[1],
-               `Exam Date` <= input$date_range[2])
-    }
+    df <- cbind(df, None = "None")
     df
   })
   
-  output$xvar_1 <- renderUI({
-    req(cases_data())
-    selectInput("xvar_1", "X-axis Variable", choices = names(cases_data()), selected = "Exam Date")
+  cases_data_plottable_IDEA <- IDEAFilter("data_filter", data = cases_data_with_none_col)
+  
+  cases_data_plottable <- eventReactive(input$refresh_data_to_plot, {
+    cases_data_plottable_IDEA()
+  }, ignoreNULL = FALSE)
+  
+  output$plotted_data_table <- renderDataTable({
+    cases_data_plottable()
   })
   
-  output$yvar_1 <- renderUI({
-    req(cases_data())
-    selectInput("yvar_1", "Y-axis Variable", choices = names(cases_data()), selected = "Dose (mGy)")
-  })
+  output$download_plotted_csv <- downloadHandler(
+    filename = function() {
+      paste0("Filtered_Theatre_Log_Export_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      write.csv(cases_data_plottable(), file, row.names = FALSE)
+    }
+  )
   
-  output$colorvar_1 <- renderUI({
-    req(cases_data())
-    selectInput("colorvar_1", "Color by", choices = names(cases_data()), selected = "Category")
-  })
   
-  # UI for second plot
-  output$xvar_2 <- renderUI({
-    req(cases_data())
-    selectInput("xvar_2", "X-axis Variable", choices = names(cases_data()), selected = "Equipment")
-  })
+  #   # Filtered data based on date range
+  # time_filtered_cases_data <- reactive({
+  #   req(cases_data_with_none_col())
+  #   df <- cases_data_with_none_col()
+  #   
+  #   if (!is.null(input$date_range)) {
+  #     df <- df %>%
+  #       filter(`Exam Date` >= input$date_range[1],
+  #              `Exam Date` <= input$date_range[2])
+  #   }
+  #   df
+  # })
   
-  output$yvar_2 <- renderUI({
-    req(cases_data())
-    selectInput("yvar_2", "Y-axis Variable", choices = names(cases_data()), selected = "Screening Time (s)")
-  })
+  output$plots <- renderUI({tagList(tags$head(tags$style(HTML(".shiny-split-layout > div {overflow: visible;}"))),
+                                    splitLayout(selectInput("chart_type1", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis1", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis1", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour1", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot1", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type2", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis2", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis2", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour2", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot2", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type3", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis3", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis3", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour3", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot3", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type4", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis4", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis4", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour4", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot4", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type5", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis5", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis5", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour5", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot5", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type6", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis6", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis6", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour6", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot6", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type7", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis7", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis7", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour7", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot7", height = "400px"),
+                                    HTML("<br>"),
+                                    splitLayout(selectInput("chart_type8", "Select chart type", choices = sort(c("", "scatter", "box", "violin")), selected = ""),
+                                                selectInput("x_axis8", "Select x-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("y_axis8", "Select y-axis variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = ""),
+                                                selectInput("colour8", "Select colour variable", choices = c("", sort(colnames(cases_data_with_none_col()))), selected = "")),
+                                    plotlyOutput("plot8", height = "400px")                                    )})
   
-  output$colorvar_2 <- renderUI({
-    req(cases_data())
-    selectInput("colorvar_2", "Color by", choices = names(cases_data()), selected = "Category")
-  })
-  
-  # First plot
-  output$plot1 <- renderPlotly({
-    req(cases_data(), input$xvar_1, input$yvar_1, input$colorvar_1)
-    plot_ly(time_filtered_cases_data(), x = ~get(input$xvar_1), y = ~get(input$yvar_1), color = ~get(input$colorvar_1), type = "scatter", mode = "markers") %>%
-      layout(xaxis = list(title = input$xvar_1), yaxis = list(title = input$yvar_1))
-  })
-  
-  # Second plot
-  output$plot2 <- renderPlotly({
-    req(cases_data(), input$xvar_2, input$yvar_2, input$colorvar_2)
-    plot_ly(time_filtered_cases_data(), x = ~get(input$xvar_2), y = ~get(input$yvar_2), color = ~get(input$colorvar_2), type = "box") %>%
-      layout(xaxis = list(title = input$xvar_2), yaxis = list(title = input$yvar_2), boxmode = "group")
-  })
+  session_store <- reactiveValues()
+  output$plot1 <- renderPlotly({session_store$plot1 <- make_generic_plot(cases_data_plottable(), input$x_axis1, input$y_axis1, input$colour1, input$chart_type1)})
+  output$plot2 <- renderPlotly({session_store$plot2 <- make_generic_plot(cases_data_plottable(), input$x_axis2, input$y_axis2, input$colour2, input$chart_type2)})
+  output$plot3 <- renderPlotly({session_store$plot3 <- make_generic_plot(cases_data_plottable(), input$x_axis3, input$y_axis3, input$colour3, input$chart_type3)})
+  output$plot4 <- renderPlotly({session_store$plot4 <- make_generic_plot(cases_data_plottable(), input$x_axis4, input$y_axis4, input$colour4, input$chart_type4)})
+  output$plot5 <- renderPlotly({session_store$plot5 <- make_generic_plot(cases_data_plottable(), input$x_axis5, input$y_axis5, input$colour5, input$chart_type5)})
+  output$plot6 <- renderPlotly({session_store$plot6 <- make_generic_plot(cases_data_plottable(), input$x_axis6, input$y_axis6, input$colour6, input$chart_type6)})
+  output$plot7 <- renderPlotly({session_store$plot7 <- make_generic_plot(cases_data_plottable(), input$x_axis7, input$y_axis7, input$colour7, input$chart_type7)})
+  output$plot8 <- renderPlotly({session_store$plot8 <- make_generic_plot(cases_data_plottable(), input$x_axis8, input$y_axis8, input$colour8, input$chart_type8)})
   
 }
 ui_secure <- secure_app(
   ui,
   enable_admin = TRUE,
-  language = list(
-    "please_authenticate" = "jlhgeluhrgv"
-  )
+  language = "en"
 )
 
 shinyApp(ui_secure, server)

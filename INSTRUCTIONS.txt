@@ -1,12 +1,70 @@
+##################################### FRESH INSTANCE (FIRST TIME ONLY) ###########################################
+
 ==From blank:
 
-docker compose up -d --build
+==make sure the folder we're in right now is named Theatre-Log-Apps
+
+==open .yml and change the name of the container and volume to something site-specific (unique).
+
+docker compose up -d
 
 ==this makes the image, volume, and container with the cases, sql, and settings files as seed data.
 
 ==then
 
-docker run --rm -v theatre-log-app_data:/data -v ${PWD}:/tmp alpine `
+### WINDOWS ###
+docker run --rm -v <REPLACE_WITH_VOLUME_NAME>:/data -v ${PWD}:/tmp alpine `
     sh -c "cp /tmp/drop_down.csv /data/ && chmod 666 /data/drop_down.csv"
+    
+### LINUX ###
+docker run --rm \
+  -v <REPLACE_WITH_VOLUME_NAME>:/data \
+  -v ${PWD}:/tmp \
+  alpine \
+  sh -c "cp -v /tmp/drop_down.csv /data/ && chmod 666 /data/drop_down.csv"
+  
+docker run --rm \
+  -v theatre-log-app_data:/data \
+  -v ${PWD}:/tmp \
+  alpine \
+  sh -c "cp -v /tmp/drop_down.csv /data/ && chmod 666 /data/drop_down.csv"
 
 ==copies the (read and writable) dropdown data into the volume (site specific)
+
+######################################### UPDATING THE APP ###################################################
+
+==make the required changes to the app.r file locally and test features work within RStudio
+
+==update image on docker hub:
+==close docker
+==connect to non-QH network
+==open Windows Powershell as administrator
+==cd into relvant directory
+
+docker login -u dutoitro
+
+==open docker desktop dashboard
+
+docker build -t dutoitro/theatre-log-app .
+docker push dutoitro/theatre-log-app:latest
+
+==on prod server:
+==cd into relvant directory
+docker compose down
+==delete image on docker desktop
+docker compose up -d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
